@@ -1,0 +1,620 @@
+{% extends "base.html" %}
+
+{% block title %}{{ media_file.title }} - Media Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item">
+                    <a href="{{ url_for('index') }}">Library</a>
+                </li>
+                <li class="breadcrumb-item active">{{ media_file.title }}</li>
+            </ol>
+        </nav>
+        
+        <h1 class="mb-1">{{ media_file.title }}</h1>
+        <p class="text-muted mb-4">{{ media_file.filename }}</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <div class="btn-group">
+            <button type="button" class="btn btn-success" id="queue-processing">
+                <i class="fas fa-play me-1"></i>Process Changes
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="location.reload()">
+                <i class="fas fa-sync me-1"></i>Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Media Information -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Media Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-4">Type:</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge bg-primary">
+                            {{ media_file.media_type|title }}
+                        </span>
+                    </dd>
+                    
+                    {% if media_file.series_name %}
+                    <dt class="col-sm-4">Series:</dt>
+                    <dd class="col-sm-8">{{ media_file.series_name }}</dd>
+                    
+                    <dt class="col-sm-4">Season:</dt>
+                    <dd class="col-sm-8">{{ media_file.season_number }}</dd>
+                    
+                    <dt class="col-sm-4">Episode:</dt>
+                    <dd class="col-sm-8">{{ media_file.episode_number }}</dd>
+                    {% endif %}
+                    
+                    <dt class="col-sm-4">Resolution:</dt>
+                    <dd class="col-sm-8">{{ media_file.resolution or 'Unknown' }}</dd>
+                    
+                    <dt class="col-sm-4">Duration:</dt>
+                    <dd class="col-sm-8">
+                        {% if media_file.duration %}
+                            {{ (media_file.duration // 3600)|int }}h {{ ((media_file.duration % 3600) // 60)|int }}m
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </dd>
+                    
+                    <dt class="col-sm-4">Video Codec:</dt>
+                    <dd class="col-sm-8">{{ media_file.video_codec or 'Unknown' }}</dd>
+                    
+                    <dt class="col-sm-4">File Size:</dt>
+                    <dd class="col-sm-8">
+                        {% if media_file.file_size %}
+                            {{ (media_file.file_size / 1024 / 1024 / 1024)|round(2) }} GB
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-cog me-2"></i>Processing Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <strong>Current Status:</strong>
+                    <div class="ms-2">
+                        {% if media_file.process_status == 'pending' %}
+                            <span class="badge bg-warning">Pending Changes</span>
+                        {% elif media_file.process_status == 'queued' %}
+                            <span class="badge bg-info">Queued for Processing</span>
+                        {% elif media_file.process_status == 'processing' %}
+                            <span class="badge bg-primary">Processing</span>
+                        {% elif media_file.process_status == 'completed' %}
+                            <span class="badge bg-success">Processing Complete</span>
+                        {% elif media_file.process_status == 'error' %}
+                            <span class="badge bg-danger">Processing Error</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Ready</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if media_file.error_message %}
+                <div class="alert alert-danger">
+                    <strong>Error:</strong> {{ media_file.error_message }}
+                </div>
+                {% endif %}
+                
+                <div id="processing-progress" style="display: none;">
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <small class="text-muted mt-1 d-block">Processing...</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Audio Tracks -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-volume-up me-2"></i>Audio Tracks
+            <span class="badge bg-secondary">{{ media_file.audio_tracks|length }}</span>
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if media_file.audio_tracks %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Original Title</th>
+                        <th>Original Language</th>
+                        <th>Codec</th>
+                        <th>Channels</th>
+                        <th>New Title</th>
+                        <th>New Language</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for track in media_file.audio_tracks %}
+                    <tr data-track-id="{{ track.id }}" data-track-type="audio" 
+                        {% if track.is_modified %}class="table-warning"{% endif %}>
+                        <td>{{ track.track_index + 1 }}</td>
+                        <td>{{ track.original_title or '-' }}</td>
+                        <td>{{ track.original_language or 'und' }}</td>
+                        <td>{{ track.codec or '-' }}</td>
+                        <td>{{ track.channels or '-' }}</td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm track-title" 
+                                   value="{{ track.new_title or track.original_title or '' }}" 
+                                   placeholder="Track title">
+                        </td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm track-language" 
+                                   value="{{ track.new_language or track.original_language or 'und' }}" 
+                                   placeholder="Language code" maxlength="3"
+                                   list="language-options-audio-{{ track.id }}"
+                                   data-track-type="audio">
+                            <datalist id="language-options-audio-{{ track.id }}">
+                                {% for code, name in language_mappings.items() %}
+                                <option value="{{ code }}">{{ code }} - {{ name }}</option>
+                                {% endfor %}
+                            </datalist>
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-primary save-track">
+                                    <i class="fas fa-save"></i>
+                                </button>
+                                <button class="btn btn-sm btn-info preview-audio" data-track-index="{{ track.track_index }}" title="Preview Audio">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                {% if track.is_modified %}
+                                <button class="btn btn-sm btn-outline-secondary reset-track">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">
+            <i class="fas fa-volume-mute fa-2x mb-3"></i>
+            <p>No audio tracks found in this media file.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Subtitle Tracks -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-closed-captioning me-2"></i>Subtitle Tracks
+            <span class="badge bg-secondary">{{ media_file.subtitle_tracks|length }}</span>
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if media_file.subtitle_tracks %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Original Title</th>
+                        <th>Original Language</th>
+                        <th>Codec</th>
+                        <th>Flags</th>
+                        <th>New Title</th>
+                        <th>New Language</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for track in media_file.subtitle_tracks %}
+                    <tr data-track-id="{{ track.id }}" data-track-type="subtitle" 
+                        {% if track.is_modified %}class="table-warning"{% endif %}>
+                        <td>{{ track.track_index + 1 }}</td>
+                        <td>{{ track.original_title or '-' }}</td>
+                        <td>{{ track.original_language or 'und' }}</td>
+                        <td>{{ track.codec or '-' }}</td>
+                        <td>
+                            {% if track.is_forced %}
+                                <span class="badge bg-warning">Forced</span>
+                            {% endif %}
+                            {% if track.is_default %}
+                                <span class="badge bg-primary">Default</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm track-title" 
+                                   value="{{ track.new_title or track.original_title or '' }}" 
+                                   placeholder="Track title">
+                        </td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm track-language" 
+                                   value="{{ track.new_language or track.original_language or 'und' }}" 
+                                   placeholder="Language code" maxlength="3"
+                                   list="language-options-subtitle-{{ track.id }}"
+                                   data-track-type="subtitle">
+                            <datalist id="language-options-subtitle-{{ track.id }}">
+                                {% for code, name in language_mappings.items() %}
+                                <option value="{{ code }}">{{ code }} - {{ name }}</option>
+                                {% endfor %}
+                            </datalist>
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-primary save-track">
+                                    <i class="fas fa-save"></i>
+                                </button>
+                                <button class="btn btn-sm btn-info preview-subtitle" data-track-index="{{ track.track_index }}" title="Preview Subtitle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                {% if track.is_modified %}
+                                <button class="btn btn-sm btn-outline-secondary reset-track">
+                                    <i class="fas fa-undo"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">
+            <i class="fas fa-closed-captioning fa-2x mb-3"></i>
+            <p>No subtitle tracks found in this media file.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Language mappings for JavaScript
+    const languageMappings = {
+        {% for code, name in language_mappings.items() %}
+        '{{ code }}': '{{ name }}',{% endfor %}
+    };
+    
+    // Save track button handlers
+    document.querySelectorAll('.save-track').forEach(button => {
+        button.addEventListener('click', function() {
+            const row = this.closest('tr');
+            const trackId = row.dataset.trackId;
+            const trackType = row.dataset.trackType;
+            const title = row.querySelector('.track-title').value;
+            const language = row.querySelector('.track-language').value;
+            
+            saveTrack(trackId, trackType, title, language, row);
+        });
+    });
+    
+    // Reset track button handlers
+    document.querySelectorAll('.reset-track').forEach(button => {
+        button.addEventListener('click', function() {
+            const row = this.closest('tr');
+            const trackId = row.dataset.trackId;
+            const trackType = row.dataset.trackType;
+            
+            resetTrack(trackId, trackType, row);
+        });
+    });
+    
+    // Queue processing button
+    document.getElementById('queue-processing').addEventListener('click', function() {
+        queueProcessing();
+    });
+    
+    // Language change handlers - auto-populate title
+    document.querySelectorAll('.track-language').forEach(languageInput => {
+        languageInput.addEventListener('change', function() {
+            const row = this.closest('tr');
+            const titleInput = row.querySelector('.track-title');
+            const selectedLanguage = this.value.toLowerCase();
+            
+            // Auto-populate title if it's empty or contains generic text
+            const currentTitle = titleInput.value.trim();
+            const isGenericTitle = !currentTitle || 
+                                 currentTitle === 'Track' || 
+                                 currentTitle === 'Audio' || 
+                                 currentTitle === 'Subtitle' ||
+                                 currentTitle === '-' ||
+                                 Object.values(languageMappings).some(name => 
+                                     currentTitle.toLowerCase() === name.toLowerCase());
+            
+            if (selectedLanguage && languageMappings[selectedLanguage] && isGenericTitle) {
+                titleInput.value = languageMappings[selectedLanguage];
+                // Mark the row as modified
+                row.classList.add('table-warning');
+            }
+        });
+        
+        // Also handle input event for datalist selection
+        languageInput.addEventListener('input', function() {
+            // Trigger change event after a short delay to allow for datalist selection
+            setTimeout(() => {
+                this.dispatchEvent(new Event('change'));
+            }, 100);
+        });
+    });
+    
+    // Preview audio button handlers
+    document.querySelectorAll('.preview-audio').forEach(button => {
+        button.addEventListener('click', function() {
+            const trackIndex = this.dataset.trackIndex;
+            const mediaId = {{ media_file.id }};
+            previewAudio(mediaId, trackIndex, this);
+        });
+    });
+    
+    // Preview subtitle button handlers
+    document.querySelectorAll('.preview-subtitle').forEach(button => {
+        button.addEventListener('click', function() {
+            const trackIndex = this.dataset.trackIndex;
+            const mediaId = {{ media_file.id }};
+            previewSubtitle(mediaId, trackIndex, this);
+        });
+    });
+    
+    // Auto-save on Enter key
+    document.querySelectorAll('.track-title, .track-language').forEach(input => {
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                this.closest('tr').querySelector('.save-track').click();
+            }
+        });
+    });
+});
+
+function saveTrack(trackId, trackType, title, language, row) {
+    const data = {
+        track_id: trackId,
+        track_type: trackType,
+        title: title,
+        language: language
+    };
+    
+    fetch('/api/update_track', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Mark row as modified
+            row.classList.add('table-warning');
+            
+            // Add reset button if not already present
+            const resetButton = row.querySelector('.reset-track');
+            if (!resetButton) {
+                const saveButton = row.querySelector('.save-track');
+                const newResetButton = document.createElement('button');
+                newResetButton.className = 'btn btn-sm btn-outline-secondary reset-track ms-1';
+                newResetButton.innerHTML = '<i class="fas fa-undo"></i>';
+                newResetButton.addEventListener('click', function() {
+                    resetTrack(trackId, trackType, row);
+                });
+                saveButton.parentNode.appendChild(newResetButton);
+            }
+            
+            showAlert('Track updated successfully', 'success');
+        } else {
+            showAlert(data.error || 'Error updating track', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('Error updating track', 'danger');
+    });
+}
+
+function resetTrack(trackId, trackType, row) {
+    // This would require additional API endpoint to reset track modifications
+    // For now, just reload the page
+    location.reload();
+}
+
+function queueProcessing() {
+    const mediaId = {{ media_file.id }};
+    
+    fetch(`/api/queue_processing/${mediaId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('File queued for processing', 'success');
+            // Update status display
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(data.error || 'Error queuing processing', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('Error queuing processing', 'danger');
+    });
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    const container = document.querySelector('.container');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        const alert = bootstrap.Alert.getOrCreateInstance(alertDiv);
+        alert.close();
+    }, 5000);
+}
+
+// Audio preview functionality
+function previewAudio(mediaId, trackIndex, buttonElement) {
+    const originalIcon = buttonElement.innerHTML;
+    buttonElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    buttonElement.disabled = true;
+    
+    // Stop any existing audio
+    const existingAudio = document.getElementById('preview-audio-player');
+    if (existingAudio) {
+        existingAudio.pause();
+        existingAudio.remove();
+    }
+    
+    // Create new audio element
+    const audio = document.createElement('audio');
+    audio.id = 'preview-audio-player';
+    audio.controls = true;
+    audio.autoplay = true;
+    audio.style.display = 'none';
+    
+    const source = `/api/preview_audio/${mediaId}/${trackIndex}`;
+    audio.src = source;
+    
+    // Add to page
+    document.body.appendChild(audio);
+    
+    // Create modal to show audio controls
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Audio Track ${parseInt(trackIndex) + 1} Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <p class="mb-3">Playing 10-second preview from 30 seconds into the track...</p>
+                    <audio controls autoplay style="width: 100%;">
+                        <source src="${source}" type="audio/mpeg">
+                        Your browser does not support audio playback.
+                    </audio>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    // Cleanup on modal close
+    modal.addEventListener('hidden.bs.modal', function() {
+        const modalAudio = modal.querySelector('audio');
+        if (modalAudio) modalAudio.pause();
+        modal.remove();
+        if (existingAudio) existingAudio.remove();
+    });
+    
+    // Reset button after loading
+    audio.addEventListener('canplay', function() {
+        buttonElement.innerHTML = originalIcon;
+        buttonElement.disabled = false;
+    });
+    
+    audio.addEventListener('error', function() {
+        buttonElement.innerHTML = originalIcon;
+        buttonElement.disabled = false;
+        alert('Error loading audio preview. The track may not be compatible.');
+        modal.remove();
+    });
+}
+
+// Subtitle preview functionality
+function previewSubtitle(mediaId, trackIndex, buttonElement) {
+    const originalIcon = buttonElement.innerHTML;
+    buttonElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    buttonElement.disabled = true;
+    
+    fetch(`/api/preview_subtitle/${mediaId}/${trackIndex}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Create modal to show subtitle content
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Subtitle Track ${parseInt(trackIndex) + 1} Preview</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted mb-3">Sample from 1-3 minutes into the subtitle track:</p>
+                            <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto; white-space: pre-wrap;">${data.content}</pre>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            const bootstrapModal = new bootstrap.Modal(modal);
+            bootstrapModal.show();
+            
+            // Cleanup on modal close
+            modal.addEventListener('hidden.bs.modal', function() {
+                modal.remove();
+            });
+        })
+        .catch(error => {
+            console.error('Error loading subtitle preview:', error);
+            alert('Error loading subtitle preview: ' + error.message);
+        })
+        .finally(() => {
+            buttonElement.innerHTML = originalIcon;
+            buttonElement.disabled = false;
+        });
+}
+
+</script>
+{% endblock %}

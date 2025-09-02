@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Media Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="fas fa-cog me-2"></i>Settings
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Media Folders -->
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-folder me-2"></i>Media Folders
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-3">
+                    Configure which folders contain your media files for automatic scanning and organization.
+                </p>
+                
+                <!-- Add Folder Form -->
+                <form method="POST" action="{{ url_for('add_folder') }}" class="mb-4">
+                    <div class="row g-3">
+                        <div class="col-md-5">
+                            <input type="text" class="form-control" name="path" 
+                                   placeholder="/path/to/media/folder" required>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" name="name" 
+                                   placeholder="Folder Name" required>
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-plus me-1"></i>Add Folder
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                
+                <!-- Existing Folders -->
+                {% if folders %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Path</th>
+                                <th>Status</th>
+                                <th>Last Scanned</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for folder in folders %}
+                            <tr>
+                                <td>
+                                    <i class="fas fa-folder me-2 text-primary"></i>
+                                    {{ folder.name }}
+                                </td>
+                                <td>
+                                    <code>{{ folder.path }}</code>
+                                </td>
+                                <td>
+                                    {% if folder.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if folder.last_scanned %}
+                                        <small class="text-muted">
+                                            {{ folder.last_scanned.strftime('%Y-%m-%d %H:%M') }}
+                                        </small>
+                                    {% else %}
+                                        <small class="text-muted">Never</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('remove_folder', folder_id=folder.id) }}" 
+                                          style="display: inline;" 
+                                          onsubmit="return confirm('Are you sure you want to remove this folder?')">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-folder-open fa-2x mb-3"></i>
+                    <p>No media folders configured yet.</p>
+                    <p>Add a folder above to start scanning your media library.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Application Settings -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-sliders-h me-2"></i>Application Settings
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('update_settings') }}">
+                    <div class="mb-3">
+                        <label for="max_concurrent_jobs" class="form-label">
+                            Concurrent Processing Jobs
+                        </label>
+                        <input type="number" class="form-control" 
+                               name="setting_max_concurrent_jobs" 
+                               id="max_concurrent_jobs"
+                               value="{{ settings.get('max_concurrent_jobs', '1') }}" 
+                               min="1" max="10">
+                        <div class="form-text">
+                            Maximum number of media files to process simultaneously.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="scan_interval" class="form-label">
+                            Scan Interval (seconds)
+                        </label>
+                        <input type="number" class="form-control" 
+                               name="setting_scan_interval" 
+                               id="scan_interval"
+                               value="{{ settings.get('scan_interval', '3600') }}" 
+                               min="300">
+                        <div class="form-text">
+                            How often to automatically scan for new media files.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="default_audio_language" class="form-label">
+                            Default Audio Language
+                        </label>
+                        <input type="text" class="form-control" 
+                               name="setting_default_audio_language" 
+                               id="default_audio_language"
+                               value="{{ settings.get('default_audio_language', 'und') }}" 
+                               maxlength="3">
+                        <div class="form-text">
+                            Default language code for audio tracks (e.g., 'eng', 'spa').
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="default_subtitle_language" class="form-label">
+                            Default Subtitle Language
+                        </label>
+                        <input type="text" class="form-control" 
+                               name="setting_default_subtitle_language" 
+                               id="default_subtitle_language"
+                               value="{{ settings.get('default_subtitle_language', 'und') }}" 
+                               maxlength="3">
+                        <div class="form-text">
+                            Default language code for subtitle tracks.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                   name="setting_backup_original_files" 
+                                   id="backup_original_files"
+                                   value="true"
+                                   {% if settings.get('backup_original_files', 'true') == 'true' %}checked{% endif %}>
+                            <label class="form-check-label" for="backup_original_files">
+                                Backup Original Files
+                            </label>
+                            <div class="form-text">
+                                Create backup copies before modifying media files.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                   name="setting_auto_detect_language" 
+                                   id="auto_detect_language"
+                                   value="true"
+                                   {% if settings.get('auto_detect_language', 'true') == 'true' %}checked{% endif %}>
+                            <label class="form-check-label" for="auto_detect_language">
+                                Auto-detect Languages
+                            </label>
+                            <div class="form-text">
+                                Automatically detect track languages when possible.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-save me-1"></i>Save Settings
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Information -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>System Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="card bg-dark">
+                            <div class="card-body text-center">
+                                <i class="fas fa-database fa-2x mb-2"></i>
+                                <h6>Database</h6>
+                                <small class="text-muted">SQLite</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-dark">
+                            <div class="card-body text-center">
+                                <i class="fas fa-cogs fa-2x mb-2"></i>
+                                <h6>Processing</h6>
+                                <small class="text-muted">FFmpeg</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-dark">
+                            <div class="card-body text-center">
+                                <i class="fas fa-eye fa-2x mb-2"></i>
+                                <h6>File Watching</h6>
+                                <small class="text-muted">Watchdog</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-dark">
+                            <div class="card-body text-center">
+                                <i class="fas fa-server fa-2x mb-2"></i>
+                                <h6>Backend</h6>
+                                <small class="text-muted">Flask</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

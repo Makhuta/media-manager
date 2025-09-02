@@ -1,0 +1,13 @@
+services:
+  media_manager:
+    image: media_manager
+    container_name: media_manager
+    ports:
+      - 8000:8000
+    environment:
+      SESSION_SECRET: "dev-secret-key-change-in-production"
+    volumes:
+      - ./db:/app/instance
+      - ./logs:/var/log/supervisor
+      - ./media:/media
+    restart: unless-stopped
