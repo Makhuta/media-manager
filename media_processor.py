@@ -31,6 +31,20 @@ class MediaProcessor:
                     
                     # Check how many jobs are currently processing
                     active_count = len(self.active_jobs)
+
+                    # If nothing is active, requeue any "stuck" jobs
+                    if active_count == 0:
+                        stuck_jobs = ProcessingJob.query.filter_by(status='processing').all()
+                        requeued = 0
+                        for job in stuck_jobs:
+                            if job.id not in self.active_jobs:
+                                job.status = 'queued'
+                                job.temp_file_path = None
+                                job.started_at = None
+                                requeued += 1
+                        if requeued:
+                            db.session.commit()
+                            logger.warning(f"Requeued {requeued} stuck jobs")
                     
                     if active_count < max_jobs:
                         # Get next queued job
