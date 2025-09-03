@@ -56,6 +56,21 @@ class MediaFile(db.Model):
         Index('idx_process_status', 'process_status'),
     )
 
+    @property
+    def languages_by_type(self):
+        """Separate languages by audio, subtitle, and combined."""
+        audio_langs = {t.original_language or 'und' for t in self.audio_tracks}
+        subtitle_langs = {t.original_language or 'und' for t in self.subtitle_tracks}
+        return {
+            "audio": sorted(audio_langs),
+            "subtitle": sorted(subtitle_langs),
+            "all": sorted(audio_langs.union(subtitle_langs)),
+        }
+    
+    @property
+    def has_undefined_lang(self):
+        return any(["und" == l for l in self.languages_by_type.get("all", [])])
+
 class AudioTrack(db.Model):
     __tablename__ = 'audio_tracks'
     

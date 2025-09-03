@@ -72,7 +72,7 @@
                     <th>Title</th>
                     <th>Resolution</th>
                     <th>Duration</th>
-                    <th>Audio Tracks</th>
+                    <th>Audio</th>
                     <th>Subtitles</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -81,31 +81,39 @@
             <tbody>
                 {% for movie in movies %}
                 <tr>
-                    <td>
+                    <td class="col-4">
                         <div class="d-flex align-items-center">
                             <i class="fas fa-film me-2 text-primary"></i>
                             <div>
-                                <strong>{{ movie.title }}</strong>
+                                <strong {% if movie.has_undefined_lang %}text-warning{% endif %}>{{ movie.title }}</strong>
                                 <br>
                                 <small class="text-muted">{{ movie.filename }}</small>
                             </div>
                         </div>
                     </td>
-                    <td>{{ movie.resolution or 'Unknown' }}</td>
-                    <td>
+                    <td class="col-1">{{ movie.resolution or 'Unknown' }}</td>
+                    <td class="col-1">
                         {% if movie.duration %}
                             {{ (movie.duration // 3600)|int }}h {{ ((movie.duration % 3600) // 60)|int }}m
                         {% else %}
                             Unknown
                         {% endif %}
                     </td>
-                    <td>
-                        <span class="badge bg-info">{{ movie.audio_tracks|length }}</span>
+                    <td class="col-2">
+                        {% for audio in movie.languages_by_type.audio %}
+                        <span class="badge bg-info">{{ audio }}</span>
+                        {% else %}
+                        <span class="badge bg-info">None</span>
+                        {% endfor %}
                     </td>
-                    <td>
-                        <span class="badge bg-success">{{ movie.subtitle_tracks|length }}</span>
+                    <td class="col-2">
+                        {% for subtitle in movie.languages_by_type.subtitle %}
+                        <span class="badge bg-success">{{ subtitle }}</span>
+                        {% else %}
+                        <span class="badge bg-success">None</span>
+                        {% endfor %}
                     </td>
-                    <td>
+                    <td class="col-1">
                         {% if movie.process_status == 'pending' %}
                             <span class="badge bg-warning">Pending Changes</span>
                         {% elif movie.process_status == 'queued' %}
@@ -118,7 +126,7 @@
                             <span class="badge bg-secondary">Ready</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td class="col-1">
                         <a href="{{ url_for('media_detail', media_id=movie.id) }}" 
                            class="btn btn-sm btn-outline-primary">
                             <i class="fas fa-edit me-1"></i>Edit
@@ -149,6 +157,26 @@
                         data-bs-target="#series-{{ loop.index }}">
                     <i class="fas fa-tv me-2"></i>{{ series_name }}
                     <span class="badge bg-primary ms-2">{{ seasons|length }} season(s)</span>
+                    {% set ns = namespace(has_undefined=False, has_pending=False) %}
+                    {% for season_num, episodes in seasons.items() %}
+                        {# Check undefined langs #}
+                        {% for episode in episodes %}
+                            {% if episode.has_undefined_lang %}
+                                {% set ns.has_undefined = True %}
+                            {% endif %}
+
+                            {# Check pending process_status #}
+                            {% if episode.process_status == 'pending' %}
+                                {% set ns.has_pending = True %}
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                    {% if ns.has_undefined %}
+                        <span class="badge bg-danger ms-2">Has undefined</span>
+                    {% endif %}
+                    {% if ns.has_pending %}
+                        <span class="badge bg-warning ms-2">Has pending</span>
+                    {% endif %}
                 </button>
             </h5>
         </div>
@@ -173,27 +201,36 @@
                             </thead>
                             <tbody>
                                 {% for episode in episodes %}
+                                {{ episode.has_undefined_lang }}
                                 <tr>
-                                    <td>
+                                    <td class="col-4">
                                         <strong>E{{ episode.episode_number }}</strong>
                                         <br>
                                         <small class="text-muted">{{ episode.filename }}</small>
                                     </td>
-                                    <td>{{ episode.resolution or 'Unknown' }}</td>
-                                    <td>
+                                    <td class="col-1">{{ episode.resolution or 'Unknown' }}</td>
+                                    <td class="col-1">
                                         {% if episode.duration %}
                                             {{ (episode.duration // 60)|int }}m
                                         {% else %}
                                             Unknown
                                         {% endif %}
                                     </td>
-                                    <td>
-                                        <span class="badge bg-info">{{ episode.audio_tracks|length }}</span>
+                                    <td class="col-2">
+                                        {% for audio in episode.languages_by_type.audio %}
+                                        <span class="badge bg-info w-10">{{ audio }}</span>
+                                        {% else %}
+                                        <span class="badge bg-info">None</span>
+                                        {% endfor %}
                                     </td>
-                                    <td>
-                                        <span class="badge bg-success">{{ episode.subtitle_tracks|length }}</span>
+                                    <td class="col-2">
+                                        {% for subtitle in episode.languages_by_type.subtitle %}
+                                        <span class="badge bg-success">{{ subtitle }}</span>
+                                        {% else %}
+                                        <span class="badge bg-success">None</span>
+                                        {% endfor %}
                                     </td>
-                                    <td>
+                                    <td class="col-1">
                                         {% if episode.process_status == 'pending' %}
                                             <span class="badge bg-warning">Pending</span>
                                         {% elif episode.process_status == 'queued' %}
@@ -206,7 +243,7 @@
                                             <span class="badge bg-secondary">Ready</span>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td class="col-1">
                                         <a href="{{ url_for('media_detail', media_id=episode.id) }}" 
                                            class="btn btn-sm btn-outline-primary">
                                             <i class="fas fa-edit me-1"></i>Edit
