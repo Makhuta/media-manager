@@ -345,21 +345,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const titleInput = row.querySelector('.track-title');
             const selectedLanguage = this.value.toLowerCase();
             
-            // Auto-populate title if it's empty or contains generic text
-            const currentTitle = titleInput.value.trim();
-            const isGenericTitle = !currentTitle || 
-                                 currentTitle === 'Track' || 
-                                 currentTitle === 'Audio' || 
-                                 currentTitle === 'Subtitle' ||
-                                 currentTitle === '-' ||
-                                 Object.values(languageMappings).some(name => 
-                                     currentTitle.toLowerCase() === name.toLowerCase());
-            
-            if (selectedLanguage && languageMappings[selectedLanguage] && isGenericTitle) {
-                titleInput.value = languageMappings[selectedLanguage];
-                // Mark the row as modified
-                row.classList.add('table-warning');
-            }
+            titleInput.value = languageMappings[selectedLanguage];
+            // Mark the row as modified
+            row.classList.add('table-warning');
         });
         
         // Also handle input event for datalist selection
