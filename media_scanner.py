@@ -60,34 +60,49 @@ class MediaScanner:
                 return
             
             existing_files_in_folder = set()
+
+            # Walk through files on disk
             for root, dirs, files in os.walk(folder.path):
                 for file in files:
                     file_path = os.path.join(root, file)
-                    
-                    # Check if file has supported extension
+
+                    # Check extension
                     if Path(file).suffix.lower() not in self.supported_extensions:
                         continue
 
-                    existing_files_in_folder.add(os.path.join(root, file))
-                    # Check if file already exists in database
+                    existing_files_in_folder.add(file_path)
+
+                    # See if it exists in DB
                     existing_file = MediaFile.query.filter_by(file_path=file_path).first()
                     if existing_file:
                         # Check if file was modified
                         file_stat = os.stat(file_path)
                         file_modified = datetime.fromtimestamp(file_stat.st_mtime)
-                        
+
                         if existing_file.file_modified and existing_file.file_modified >= file_modified:
                             continue  # File hasn't changed
-                    
-                    # Scan the media file
+
+                    # (Re)scan the media file
                     self._scan_media_file(folder, file_path)
-                    
+
                     # Small delay to prevent system overload
                     time.sleep(0.1)
 
+            # Cleanup DB entries for missing files
             media_files_in_db = MediaFile.query.filter_by(folder_id=folder.id).all()
             for media_file in media_files_in_db:
                 if media_file.file_path not in existing_files_in_folder:
+                    # Skip deletion if there’s an active processing job
+                    active_job = ProcessingJob.query.filter_by(
+                        media_file_id=media_file.id, status="processing"
+                    ).first()
+                    if active_job:
+                        logger.info(
+                            f"Skipping deletion of {media_file.file_path} "
+                            f"because job {active_job.id} is still processing"
+                        )
+                        continue
+
                     logger.info(f"Deleting missing file from DB: {media_file.file_path}")
 
                     # Delete related tracks first
@@ -95,13 +110,15 @@ class MediaScanner:
                     SubtitleTrack.query.filter_by(media_file_id=media_file.id).delete()
                     ProcessingJob.query.filter_by(media_file_id=media_file.id).delete()
 
-                    # Delete the MediaFile
+                    # Delete the MediaFile itself
                     db.session.delete(media_file)
 
             db.session.commit()
-        
+
         except Exception as e:
-            logger.error(f"Error scanning folder {folder.path}: {e}")
+            db.session.rollback()
+            logger.error(f"Error scanning folder {folder.path}: {e}", exc_info=True)
+
     
     def _scan_media_file(self, folder, file_path):
         """Scan a specific media file and extract metadata"""
