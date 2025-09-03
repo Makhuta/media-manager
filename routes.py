@@ -308,35 +308,41 @@ def preview_audio(media_id, track_index):
     """Generate and serve a short audio preview for a specific track"""
     try:
         media_file = MediaFile.query.get_or_404(media_id)
-        
+
         import tempfile
         import ffmpeg
-        from flask import send_file
-        
+        from flask import send_file, request
+
+        # Read optional start time (in seconds) from query params
+        start_time = request.args.get("start", default=30, type=int)
+        if start_time < 0:
+            start_time = 0
+
         # Create temporary file for audio snippet
-        temp_audio = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False)
+        temp_audio = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
         temp_audio.close()
-        
+
         # Extract 10-second audio snippet from the specific track
         (
             ffmpeg
-            .input(media_file.file_path, ss=30)  # Start at 30 seconds
+            .input(media_file.file_path, ss=start_time)  # Start time is now dynamic
             .output(
                 temp_audio.name,
-                map=f'0:a:{track_index}',  # Select specific audio track
+                map=f"0:a:{track_index}",  # Select specific audio track
                 t=10,  # Duration: 10 seconds
-                acodec='mp3',
-                ab='128k'
+                acodec="mp3",
+                ab="128k",
             )
             .overwrite_output()
             .run(quiet=True)
         )
-        
-        return send_file(temp_audio.name, as_attachment=False, mimetype='audio/mpeg')
-        
+
+        return send_file(temp_audio.name, as_attachment=False, mimetype="audio/mpeg")
+
     except Exception as e:
         logger.error(f"Error generating audio preview: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/preview_subtitle/<int:media_id>/<int:track_index>')
 def preview_subtitle(media_id, track_index):
@@ -358,7 +364,7 @@ def preview_subtitle(media_id, track_index):
             .output(
                 temp_srt.name,
                 map=f'0:s:{track_index}',  # Select specific subtitle track
-                t=120,  # Duration: 2 minutes
+                t=600,  # Duration: 10 minutes
                 f='srt'  # SRT format
             )
             .overwrite_output()
@@ -379,11 +385,11 @@ def preview_subtitle(media_id, track_index):
         
         # Return first few subtitle entries for preview
         lines = subtitle_content.split('\n')
-        preview_lines = lines[:20] if len(lines) > 20 else lines
+        preview_lines = lines
         
         return jsonify({
             'content': '\n'.join(preview_lines),
-            'sample_text': subtitle_content[:500] + '...' if len(subtitle_content) > 500 else subtitle_content
+            'sample_text': subtitle_content
         })
         
     except Exception as e:

@@ -483,30 +483,42 @@ function previewAudio(mediaId, trackIndex, buttonElement) {
     const originalIcon = buttonElement.innerHTML;
     buttonElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     buttonElement.disabled = true;
-    
-    // Stop any existing audio
-    const existingAudio = document.getElementById('preview-audio-player');
-    if (existingAudio) {
-        existingAudio.pause();
-        existingAudio.remove();
+
+    let startTime = 0; // default start time
+
+    // Helper to load audio with current start time
+    function loadAudio() {
+        const source = `/api/preview_audio/${mediaId}/${trackIndex}?start=${startTime}`;
+        modalBody.innerHTML = `
+            <p class="mb-3">Playing 10-second preview from ${startTime}s into the track...</p>
+            <audio controls autoplay style="width: 100%;">
+                <source src="${source}" type="audio/mpeg">
+                Your browser does not support audio playback.
+            </audio>
+            <div class="mt-3">
+                <button class="btn btn-outline-primary btn-sm me-2" id="backward-btn">
+                    <i class="fas fa-backward"></i> -10s
+                </button>
+                <button class="btn btn-outline-primary btn-sm" id="forward-btn">
+                    +10s <i class="fas fa-forward"></i>
+                </button>
+            </div>
+        `;
+
+        // Reattach skip handlers
+        modalBody.querySelector("#backward-btn").addEventListener("click", () => {
+            startTime = Math.max(0, startTime - 10);
+            loadAudio();
+        });
+        modalBody.querySelector("#forward-btn").addEventListener("click", () => {
+            startTime += 10;
+            loadAudio();
+        });
     }
-    
-    // Create new audio element
-    const audio = document.createElement('audio');
-    audio.id = 'preview-audio-player';
-    audio.controls = true;
-    audio.autoplay = true;
-    audio.style.display = 'none';
-    
-    const source = `/api/preview_audio/${mediaId}/${trackIndex}`;
-    audio.src = source;
-    
-    // Add to page
-    document.body.appendChild(audio);
-    
-    // Create modal to show audio controls
-    const modal = document.createElement('div');
-    modal.className = 'modal fade';
+
+    // Modal skeleton
+    const modal = document.createElement("div");
+    modal.className = "modal fade";
     modal.innerHTML = `
         <div class="modal-dialog">
             <div class="modal-content">
@@ -514,45 +526,37 @@ function previewAudio(mediaId, trackIndex, buttonElement) {
                     <h5 class="modal-title">Audio Track ${parseInt(trackIndex) + 1} Preview</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body text-center">
-                    <p class="mb-3">Playing 10-second preview from 30 seconds into the track...</p>
-                    <audio controls autoplay style="width: 100%;">
-                        <source src="${source}" type="audio/mpeg">
-                        Your browser does not support audio playback.
-                    </audio>
-                </div>
+                <div class="modal-body text-center"></div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
     `;
-    
+
+    const modalBody = modal.querySelector(".modal-body");
     document.body.appendChild(modal);
+
     const bootstrapModal = new bootstrap.Modal(modal);
     bootstrapModal.show();
-    
+
+    // Load initial preview
+    loadAudio();
+
     // Cleanup on modal close
-    modal.addEventListener('hidden.bs.modal', function() {
-        const modalAudio = modal.querySelector('audio');
+    modal.addEventListener("hidden.bs.modal", function () {
+        const modalAudio = modal.querySelector("audio");
         if (modalAudio) modalAudio.pause();
         modal.remove();
-        if (existingAudio) existingAudio.remove();
     });
-    
+
     // Reset button after loading
-    audio.addEventListener('canplay', function() {
+    modal.addEventListener("shown.bs.modal", function () {
         buttonElement.innerHTML = originalIcon;
         buttonElement.disabled = false;
-    });
-    
-    audio.addEventListener('error', function() {
-        buttonElement.innerHTML = originalIcon;
-        buttonElement.disabled = false;
-        alert('Error loading audio preview. The track may not be compatible.');
-        modal.remove();
     });
 }
+
 
 // Subtitle preview functionality
 function previewSubtitle(mediaId, trackIndex, buttonElement) {
@@ -578,8 +582,8 @@ function previewSubtitle(mediaId, trackIndex, buttonElement) {
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
-                            <p class="text-muted mb-3">Sample from 1-3 minutes into the subtitle track:</p>
-                            <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto; white-space: pre-wrap;">${data.content}</pre>
+                            <p class="text-muted mb-3">The subtitle track:</p>
+                            <pre class="bg-dark text-white p-3 rounded" style="max-height: 400px; overflow-y: auto; white-space: pre-wrap;">${data.content}</pre>
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
