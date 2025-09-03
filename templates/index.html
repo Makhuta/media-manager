@@ -85,7 +85,7 @@
                         <div class="d-flex align-items-center">
                             <i class="fas fa-film me-2 text-primary"></i>
                             <div>
-                                <strong {% if movie.has_undefined_lang %}text-warning{% endif %}>{{ movie.title }}</strong>
+                                <strong {% if movie.has_undefined_lang %}class="text-warning"{% endif %}>{{ movie.title }}</strong>
                                 <br>
                                 <small class="text-muted">{{ movie.filename }}</small>
                             </div>
@@ -201,7 +201,6 @@
                             </thead>
                             <tbody>
                                 {% for episode in episodes %}
-                                {{ episode.has_undefined_lang }}
                                 <tr>
                                     <td class="col-4">
                                         <strong>E{{ episode.episode_number }}</strong>
