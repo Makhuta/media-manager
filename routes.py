@@ -10,12 +10,36 @@ logger = logging.getLogger(__name__)
 config_manager = ConfigManager()
 media_processor = MediaProcessor()
 
+# Language mappings for common languages
+def build_language_dict_native():
+    lang_dict = {}
+    
+    for lang in pycountry.languages:
+        # Try to get any code
+        codes = [getattr(lang, attr, None) for attr in ("alpha_2", "alpha_3", "bibliographic", "terminology")]
+        codes = [c for c in codes if c]
+        if not codes:
+            continue
+        
+        # Get native name using langcodes
+        try:
+            native_name = langcodes.Language.get(codes[0]).display_name(codes[0])
+        except Exception:
+            native_name = getattr(lang, "name", codes[0])
+        
+        for code in codes:
+            lang_dict[code] = str(native_name).title()
+    
+    return lang_dict
+
 @app.route('/')
 def index():
     """Main dashboard showing media library"""
     # Get filter parameters
     media_type = request.args.get('type', 'all')
     search_query = request.args.get('search', '')
+    selected_language = request.args.get('language', '').strip()
+    lang_mode = request.args.get('lang_mode', 'has')
     
     # Build query
     query = MediaFile.query.filter(MediaFile.scan_status == 'completed')
@@ -33,6 +57,28 @@ def index():
             )
         )
     
+    # Language filter
+    if selected_language:
+        # Build subquery for files with the language
+        audio_match = db.session.query(AudioTrack.media_file_id.label('media_file_id')).filter(
+            db.or_(
+                AudioTrack.original_language == selected_language,
+                AudioTrack.new_language == selected_language
+            )
+        )
+        subtitle_match = db.session.query(SubtitleTrack.media_file_id.label('media_file_id')).filter(
+            db.or_(
+                SubtitleTrack.original_language == selected_language,
+                SubtitleTrack.new_language == selected_language
+            )
+        )
+        match_ids = audio_match.union(subtitle_match).subquery()
+
+        if lang_mode == 'has':
+            query = query.filter(MediaFile.id.in_(db.select(match_ids.c.media_file_id)))
+        else:  # 'not'
+            query = query.filter(~MediaFile.id.in_(db.select(match_ids.c.media_file_id)))
+
     # Get movies
     movies = []
     if media_type in ['all', 'movie']:
@@ -62,34 +108,15 @@ def index():
                          tv_shows=tv_shows,
                          media_type=media_type,
                          search_query=search_query,
-                         scanning_progress=scanning_progress)
+                         scanning_progress=scanning_progress,
+                         language_options=build_language_dict_native(),
+                         selected_language=selected_language,
+                         lang_mode=lang_mode)
 
 @app.route('/media/<int:media_id>')
 def media_detail(media_id):
     """Show detailed view of a media file with track editing"""
     media_file = MediaFile.query.get_or_404(media_id)
-    
-    # Language mappings for common languages
-    def build_language_dict_native():
-        lang_dict = {}
-        
-        for lang in pycountry.languages:
-            # Try to get any code
-            codes = [getattr(lang, attr, None) for attr in ("alpha_2", "alpha_3", "bibliographic", "terminology")]
-            codes = [c for c in codes if c]
-            if not codes:
-                continue
-            
-            # Get native name using langcodes
-            try:
-                native_name = langcodes.Language.get(codes[0]).display_name(codes[0])
-            except Exception:
-                native_name = getattr(lang, "name", codes[0])
-            
-            for code in codes:
-                lang_dict[code] = str(native_name).title()
-        
-        return lang_dict
     
     return render_template('media_detail.html', 
                          media_file=media_file, 

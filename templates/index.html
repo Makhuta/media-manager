@@ -33,6 +33,19 @@
                        {% if media_type == 'tv' %}checked{% endif %}>
                 <label class="btn btn-outline-primary" for="type-tv">TV Shows</label>
             </div>
+            <div class="mt-2 d-flex gap-2">
+                <input type="text" class="form-control" name="language" list="language-list"
+                       placeholder="Language code (e.g. en, fr, und)" value="{{ selected_language }}">
+                <datalist id="language-list">
+                    {% for code, name in language_options.items() %}
+                    <option value="{{ code }}">{{ name }}</option>
+                    {% endfor %}
+                </datalist>
+                <select class="form-select" name="lang_mode">
+                    <option value="has" {% if lang_mode == 'has' %}selected{% endif %}>Has</option>
+                    <option value="not" {% if lang_mode == 'not' %}selected{% endif %}>Does Not Have</option>
+                </select>
+            </div>
         </form>
     </div>
 </div>
