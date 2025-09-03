@@ -18,6 +18,19 @@ class MediaScanner:
             '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.m4v', '.webm', 
             '.ts', '.mts', '.m2ts', '.vob', '.mpg', '.mpeg', '.3gp', '.asf'
         }
+
+    def requeue_processes(self):
+        with app.app_context():
+            ProcessingJob.query.filter_by(status='processing').update(
+                {
+                    ProcessingJob.status: 'queued',
+                    ProcessingJob.temp_file_path: None,
+                    ProcessingJob.started_at: None
+                },
+                synchronize_session='fetch'
+            )
+            db.session.commit()
+
     
     def start_initial_scan(self):
         """Start the initial media scan"""
@@ -94,12 +107,13 @@ class MediaScanner:
                 if media_file.file_path not in existing_files_in_folder:
                     # Skip deletion if there’s an active processing job
                     active_job = ProcessingJob.query.filter_by(
-                        media_file_id=media_file.id, status="processing"
+                        media_file_id=media_file.id).filter(
+                        ProcessingJob.status.in_(['queued', 'processing'])
                     ).first()
                     if active_job:
                         logger.info(
                             f"Skipping deletion of {media_file.file_path} "
-                            f"because job {active_job.id} is still processing"
+                            f"because job {active_job.id} is still processing or is queued"
                         )
                         continue
 
@@ -124,34 +138,35 @@ class MediaScanner:
         """Scan a specific media file and extract metadata"""
         try:
             logger.debug(f"Scanning file: {file_path}")
-            
-            # Get file statistics
+
+            # File statistics
             file_stat = os.stat(file_path)
             file_size = file_stat.st_size
             file_modified = datetime.fromtimestamp(file_stat.st_mtime)
             filename = os.path.basename(file_path)
-            
-            # Check if file already exists
+
+            # Get or create MediaFile
             media_file = MediaFile.query.filter_by(file_path=file_path).first()
             if not media_file:
-                media_file = MediaFile()
-                media_file.folder_id = folder.id
-                media_file.file_path = file_path
-                media_file.filename = filename
+                media_file = MediaFile(
+                    folder_id=folder.id,
+                    file_path=file_path,
+                    filename=filename
+                )
                 db.session.add(media_file)
-            
-            # Update file information
+
+            # Update basic file info
             media_file.file_size = file_size
             media_file.file_modified = file_modified
             media_file.scan_status = 'scanning'
+
             db.session.commit()
-            
-            # Extract media information using ffmpeg
+
             try:
                 probe = ffmpeg.probe(file_path)
-                
-                # Get video stream info
-                video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+
+                # Video stream info
+                video_stream = next((s for s in probe['streams'] if s['codec_type'] == 'video'), None)
                 if video_stream:
                     media_file.duration = float(probe['format'].get('duration', 0))
                     media_file.video_codec = video_stream.get('codec_name', '')
@@ -159,49 +174,83 @@ class MediaScanner:
                     height = video_stream.get('height', 0)
                     if width and height:
                         media_file.resolution = f"{width}x{height}"
-                
-                # Determine media type and extract title information
-                media_file.media_type, media_file.title, media_file.series_name, media_file.season_number, media_file.episode_number = self._classify_media(filename, file_path)
-                
-                # Clear existing tracks
-                AudioTrack.query.filter_by(media_file_id=media_file.id).delete()
-                SubtitleTrack.query.filter_by(media_file_id=media_file.id).delete()
-                
-                # Extract audio tracks
-                audio_tracks = [stream for stream in probe['streams'] if stream['codec_type'] == 'audio']
-                for i, audio_stream in enumerate(audio_tracks):
-                    audio_track = AudioTrack()
-                    audio_track.media_file_id = media_file.id
-                    audio_track.track_index = i
-                    audio_track.original_title = audio_stream.get('tags', {}).get('title', '')
-                    audio_track.original_language = audio_stream.get('tags', {}).get('language', '')
-                    audio_track.codec = audio_stream.get('codec_name', '')
-                    audio_track.channels = audio_stream.get('channels', 0)
-                    audio_track.sample_rate = audio_stream.get('sample_rate', 0)
-                    db.session.add(audio_track)
-                
-                # Extract subtitle tracks
-                subtitle_tracks = [stream for stream in probe['streams'] if stream['codec_type'] == 'subtitle']
-                for i, subtitle_stream in enumerate(subtitle_tracks):
-                    subtitle_track = SubtitleTrack()
-                    subtitle_track.media_file_id = media_file.id
-                    subtitle_track.track_index = i
-                    subtitle_track.original_title = subtitle_stream.get('tags', {}).get('title', '')
-                    subtitle_track.original_language = subtitle_stream.get('tags', {}).get('language', '')
-                    subtitle_track.codec = subtitle_stream.get('codec_name', '')
-                    subtitle_track.is_forced = subtitle_stream.get('disposition', {}).get('forced', 0) == 1
-                    subtitle_track.is_default = subtitle_stream.get('disposition', {}).get('default', 0) == 1
-                    db.session.add(subtitle_track)
-                
+
+                # Classify media
+                (
+                    media_file.media_type,
+                    media_file.title,
+                    media_file.series_name,
+                    media_file.season_number,
+                    media_file.episode_number
+                ) = self._classify_media(filename, file_path)
+
+                # Check for active jobs before touching tracks
+                active_job = ProcessingJob.query.filter(
+                    ProcessingJob.media_file_id == media_file.id,
+                    ProcessingJob.status.in_(["processing", "queued"])
+                ).first()
+
+                if not active_job:
+                    # Clear existing tracks
+                    AudioTrack.query.filter_by(media_file_id=media_file.id).delete()
+                    SubtitleTrack.query.filter_by(media_file_id=media_file.id).delete()
+
+                    # Audio tracks
+                    audio_tracks = [s for s in probe['streams'] if s['codec_type'] == 'audio']
+                    for i, audio_stream in enumerate(audio_tracks):
+                        audio_track = AudioTrack(
+                            media_file_id=media_file.id,
+                            track_index=i,
+                            original_title=audio_stream.get('tags', {}).get('title', ''),
+                            original_language=audio_stream.get('tags', {}).get('language', ''),
+                            codec=audio_stream.get('codec_name', ''),
+                            channels=audio_stream.get('channels', 0),
+                            sample_rate=audio_stream.get('sample_rate', 0)
+                        )
+                        db.session.add(audio_track)
+
+                    # Subtitle tracks
+                    subtitle_tracks = [s for s in probe['streams'] if s['codec_type'] == 'subtitle']
+                    for i, subtitle_stream in enumerate(subtitle_tracks):
+                        subtitle_track = SubtitleTrack(
+                            media_file_id=media_file.id,
+                            track_index=i,
+                            original_title=subtitle_stream.get('tags', {}).get('title', ''),
+                            original_language=subtitle_stream.get('tags', {}).get('language', ''),
+                            codec=subtitle_stream.get('codec_name', ''),
+                            is_forced=subtitle_stream.get('disposition', {}).get('forced', 0) == 1,
+                            is_default=subtitle_stream.get('disposition', {}).get('default', 0) == 1
+                        )
+                        db.session.add(subtitle_track)
+                else:
+                    logger.info(
+                        f"Skipping track update for {file_path} because job {active_job.id} is {active_job.status}"
+                    )
+
+                # Mark scan as completed
                 media_file.scan_status = 'completed'
                 media_file.error_message = None
-                
-            except Exception as e:
-                logger.error(f"Error probing file {file_path}: {e}")
+
+            except Exception as probe_error:
+                logger.error(f"Error probing file {file_path}: {probe_error}", exc_info=True)
                 media_file.scan_status = 'error'
-                media_file.error_message = str(e)
-            
+                media_file.error_message = str(probe_error)
+
+            # Commit everything at once
             db.session.commit()
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error scanning media file {file_path}: {e}", exc_info=True)
+            # Attempt to mark media_file as error if possible
+            try:
+                if 'media_file' in locals() and media_file:
+                    media_file.scan_status = 'error'
+                    media_file.error_message = str(e)
+                    db.session.commit()
+            except Exception as inner_e:
+                logger.warning(f"Failed to mark media_file as error for {file_path}: {inner_e}")
+
             
         except Exception as e:
             logger.error(f"Error scanning media file {file_path}: {e}")

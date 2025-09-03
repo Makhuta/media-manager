@@ -24,6 +24,7 @@ def start_background_services():
     # Start initial scan after a short delay
     def delayed_scan():
         time.sleep(2)  # Give the app time to start
+        media_scanner.requeue_processes()
         media_scanner.start_initial_scan()
     
     scan_thread = threading.Thread(target=delayed_scan, daemon=True)
