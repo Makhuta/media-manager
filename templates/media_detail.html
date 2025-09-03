@@ -136,6 +136,12 @@
     </div>
 </div>
 
+<datalist id="language-options">
+    {% for code, name in language_mappings.items() %}
+    <option value="{{ code }}">{{ code }} - {{ name }}</option>
+    {% endfor %}
+</datalist>
+
 <!-- Audio Tracks -->
 <div class="card mb-4">
     <div class="card-header">
@@ -156,6 +162,7 @@
                         <th>Codec</th>
                         <th>Channels</th>
                         <th>New Title</th>
+                        <th></th>
                         <th>New Language</th>
                         <th>Actions</th>
                     </tr>
@@ -175,16 +182,16 @@
                                    placeholder="Track title">
                         </td>
                         <td>
+                            <button class="btn btn-sm btn-outline-secondary convert-track">
+                                <i class="fas fa-arrow-left"></i>
+                            </button>
+                        </td>
+                        <td>
                             <input type="text" class="form-control form-control-sm track-language" 
                                    value="{{ track.new_language or track.original_language or 'und' }}" 
                                    placeholder="Language code" maxlength="3"
-                                   list="language-options-audio-{{ track.id }}"
+                                   list="language-options"
                                    data-track-type="audio">
-                            <datalist id="language-options-audio-{{ track.id }}">
-                                {% for code, name in language_mappings.items() %}
-                                <option value="{{ code }}">{{ code }} - {{ name }}</option>
-                                {% endfor %}
-                            </datalist>
                         </td>
                         <td>
                             <div class="btn-group" role="group">
@@ -235,6 +242,7 @@
                         <th>Codec</th>
                         <th>Flags</th>
                         <th>New Title</th>
+                        <th></th>
                         <th>New Language</th>
                         <th>Actions</th>
                     </tr>
@@ -261,16 +269,16 @@
                                    placeholder="Track title">
                         </td>
                         <td>
+                            <button class="btn btn-sm btn-outline-secondary convert-track">
+                                <i class="fas fa-arrow-left"></i>
+                            </button>
+                        </td>
+                        <td>
                             <input type="text" class="form-control form-control-sm track-language" 
                                    value="{{ track.new_language or track.original_language or 'und' }}" 
                                    placeholder="Language code" maxlength="3"
-                                   list="language-options-subtitle-{{ track.id }}"
+                                   list="language-options"
                                    data-track-type="subtitle">
-                            <datalist id="language-options-subtitle-{{ track.id }}">
-                                {% for code, name in language_mappings.items() %}
-                                <option value="{{ code }}">{{ code }} - {{ name }}</option>
-                                {% endfor %}
-                            </datalist>
                         </td>
                         <td>
                             <div class="btn-group" role="group">
@@ -311,6 +319,19 @@ document.addEventListener('DOMContentLoaded', function() {
         {% for code, name in language_mappings.items() %}
         '{{ code }}': '{{ name }}',{% endfor %}
     };
+
+    // Convert track button handlers
+    document.querySelectorAll('.convert-track').forEach(button => {
+        button.addEventListener('click', function() {
+            const row = this.closest('tr');
+            const trackId = row.dataset.trackId;
+            const trackType = row.dataset.trackType;
+            const language = row.querySelector('.track-language').value;
+            const title = row.querySelector('.track-title').value = languageMappings[language.toLowerCase()];
+            
+            saveTrack(trackId, trackType, title, language, row);
+        });
+    });
     
     // Save track button handlers
     document.querySelectorAll('.save-track').forEach(button => {

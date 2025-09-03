@@ -150,26 +150,26 @@ class MediaProcessor:
             command.extend(["-c:v", "copy", "-map", "0:v:0"])
 
             # Add metadata for modified audio tracks
-            for audio_track in media_file.audio_tracks:
-                track_index = audio_track.track_index
-                command.extend(["-map", f"0:a:{track_index}"])
-                if audio_track.is_modified:
-                    if audio_track.new_title:
-                        command.extend([f'-metadata:s:a:{track_index}', f'title={audio_track.new_title}'])
-                    if audio_track.new_language:
-                        iso_lang = to_iso639_2(audio_track.new_language)
-                        command.extend([f'-metadata:s:a:{track_index}', f'language={iso_lang}'])
+            for i, track in enumerate(media_file.audio_tracks):
+                command.extend(["-map", f"0:a:{i}", "-c:a", "copy"])
+                if track.is_modified:
+                    if track.new_title:
+                        command.extend([f"-metadata:s:a:{i}", f"title={track.new_title}"])
+                    if track.new_language:
+                        iso_lang = to_iso639_2(track.new_language)
+                        command.extend([f"-metadata:s:a:{i}", f"language={iso_lang}"])
 
-            # Add metadata for modified subtitle tracks
-            for subtitle_track in media_file.subtitle_tracks:
-                track_index = subtitle_track.track_index
-                command.extend(["-map", f"0:s:{track_index}"])
-                if subtitle_track.is_modified:
-                    if subtitle_track.new_title:
-                        command.extend([f'-metadata:s:s:{track_index}', f'title={subtitle_track.new_title}'])
-                    if subtitle_track.new_language:
-                        iso_lang = to_iso639_2(subtitle_track.new_language)
-                        command.extend([f'-metadata:s:s:{track_index}', f'language={iso_lang}'])
+            # Subtitles: only map text subtitles (remove bitmap ones)
+            for i, track in enumerate(media_file.subtitle_tracks):
+                # Only keep text subtitles (e.g., 'subrip', 'ass') for copying
+                if track.codec.lower() in ["subrip", "ass", "ssa", "webvtt"]:  
+                    command.extend(["-map", f"0:s:{i}", "-c:s", "copy"])
+                    if track.is_modified:
+                        if track.new_title:
+                            command.extend([f"-metadata:s:s:{i}", f"title={track.new_title}"])
+                        if track.new_language:
+                            iso_lang = to_iso639_2(track.new_language)
+                            command.extend([f"-metadata:s:s:{i}", f"language={iso_lang}"])
             
             command.extend([temp_path, "-y"])
 

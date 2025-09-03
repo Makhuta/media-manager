@@ -4,7 +4,7 @@ from models import MediaFolder, MediaFile, AudioTrack, SubtitleTrack, Processing
 from config_manager import ConfigManager
 from media_processor import MediaProcessor
 import os
-import logging
+import logging, pycountry, langcodes
 
 logger = logging.getLogger(__name__)
 config_manager = ConfigManager()
@@ -70,54 +70,30 @@ def media_detail(media_id):
     media_file = MediaFile.query.get_or_404(media_id)
     
     # Language mappings for common languages
-    language_mappings = {
-        'eng': 'English',
-        'spa': 'Español',
-        'fre': 'Français',
-        'ger': 'Deutsch',
-        'ita': 'Italiano',
-        'por': 'Português',
-        'rus': 'Русский',
-        'jpn': '日本語',
-        'kor': '한국어',
-        'chi': '中文',
-        'ara': 'العربية',
-        'hin': 'हिन्दी',
-        'dut': 'Nederlands',
-        'pol': 'Polski',
-        'cze': 'Čeština',
-        'swe': 'Svenska',
-        'nor': 'Norsk',
-        'dan': 'Dansk',
-        'fin': 'Suomi',
-        'hun': 'Magyar',
-        'tur': 'Türkçe',
-        'gre': 'Ελληνικά',
-        'heb': 'עברית',
-        'tha': 'ไทย',
-        'vie': 'Tiếng Việt',
-        'ind': 'Bahasa Indonesia',
-        'msa': 'Bahasa Melayu',
-        'ukr': 'Українська',
-        'bul': 'Български',
-        'hrv': 'Hrvatski',
-        'srp': 'Српски',
-        'slv': 'Slovenščina',
-        'slk': 'Slovenčina',
-        'ron': 'Română',
-        'est': 'Eesti',
-        'lav': 'Latviešu',
-        'lit': 'Lietuvių',
-        'cat': 'Català',
-        'baq': 'Euskera',
-        'ice': 'Íslenska',
-        'mlt': 'Malti',
-        'und': 'Undefined'
-    }
+    def build_language_dict_native():
+        lang_dict = {}
+        
+        for lang in pycountry.languages:
+            # Try to get any code
+            codes = [getattr(lang, attr, None) for attr in ("alpha_2", "alpha_3", "bibliographic", "terminology")]
+            codes = [c for c in codes if c]
+            if not codes:
+                continue
+            
+            # Get native name using langcodes
+            try:
+                native_name = langcodes.Language.get(codes[0]).display_name(codes[0])
+            except Exception:
+                native_name = getattr(lang, "name", codes[0])
+            
+            for code in codes:
+                lang_dict[code] = str(native_name).title()
+        
+        return lang_dict
     
     return render_template('media_detail.html', 
                          media_file=media_file, 
-                         language_mappings=language_mappings)
+                         language_mappings=build_language_dict_native())
 
 @app.route('/api/update_track', methods=['POST'])
 def update_track():
