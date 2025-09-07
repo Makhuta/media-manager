@@ -161,10 +161,10 @@ class MediaProcessor:
 
             # Subtitles: only map text subtitles (remove bitmap ones)
             sub_i = 0
-            for _, track in enumerate(media_file.subtitle_tracks):
+            for i, track in enumerate(media_file.subtitle_tracks):
                 # Only keep text subtitles (e.g., 'subrip', 'ass') for copying
                 if track.codec.lower() in ["subrip", "ass", "ssa", "webvtt"]:  
-                    command.extend(["-map", f"0:s:{sub_i}", "-c:s", "copy"])
+                    command.extend(["-map", f"0:s:{i}", "-c:s", "copy"])
                     if track.is_modified:
                         if track.new_title:
                             command.extend([f"-metadata:s:s:{sub_i}", f"title={track.new_title}"])
