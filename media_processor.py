@@ -160,16 +160,18 @@ class MediaProcessor:
                         command.extend([f"-metadata:s:a:{i}", f"language={iso_lang}"])
 
             # Subtitles: only map text subtitles (remove bitmap ones)
-            for i, track in enumerate(media_file.subtitle_tracks):
+            sub_i = 0
+            for _, track in enumerate(media_file.subtitle_tracks):
                 # Only keep text subtitles (e.g., 'subrip', 'ass') for copying
                 if track.codec.lower() in ["subrip", "ass", "ssa", "webvtt"]:  
-                    command.extend(["-map", f"0:s:{i}", "-c:s", "copy"])
+                    command.extend(["-map", f"0:s:{sub_i}", "-c:s", "copy"])
                     if track.is_modified:
                         if track.new_title:
-                            command.extend([f"-metadata:s:s:{i}", f"title={track.new_title}"])
+                            command.extend([f"-metadata:s:s:{sub_i}", f"title={track.new_title}"])
                         if track.new_language:
                             iso_lang = to_iso639_2(track.new_language)
-                            command.extend([f"-metadata:s:s:{i}", f"language={iso_lang}"])
+                            command.extend([f"-metadata:s:s:{sub_i}", f"language={iso_lang}"])
+                    sub_i += 1
             
             command.extend([temp_path, "-y"])
 
